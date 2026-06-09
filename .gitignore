@@ -1,0 +1,25 @@
+# Data and datasets
+data/
+dataset/
+datasets/
+*.csv
+*.parquet
+
+# Python virtual environment
+.venv/
+venv/
+ENV/
+env/
+
+# Environment variables
+.env
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE files
+.idea/
+.vscode/
+.DS_Store
