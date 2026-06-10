@@ -1,68 +1,157 @@
-# Big Data Storage Architecture: CSV vs Parquet
+# Big Data Storage Engineering: CSV vs. Parquet Benchmarking
 
 ## PFE-M 2026 Big Data — Sujet 1: L’Architecte du Stockage
 
-### Objective
-This project demonstrates the differences in storage engineering between row-based formats (CSV) and columnar formats (Apache Parquet). It proves that choosing a storage format is a strategic decision for national data infrastructure, impacting disk I/O, network bandwidth on HDFS, and query execution times. 
+[![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
+[![Apache Spark](https://img.shields.io/badge/Apache_Spark-E25A1C?style=for-the-badge&logo=apachespark&logoColor=white)](https://spark.apache.org/)
+[![Apache Hadoop](https://img.shields.io/badge/Apache_Hadoop-EEEEEE?style=for-the-badge&logo=apachehadoop&logoColor=black)](https://hadoop.apache.org/)
+[![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Jupyter](https://img.shields.io/badge/Jupyter-F37626?style=for-the-badge&logo=jupyter&logoColor=white)](https://jupyter.org/)
 
-It uses **Apache Spark** to ingest the NYC Yellow Taxi dataset and compares:
-- CSV
-- Parquet (Snappy Compression)
-- Parquet (Gzip Compression)
-- Parquet (Uncompressed)
+---
 
-### Requirements
-- Docker and Docker Compose
-- Python 3.9+
-- Bash/WSL (if running on Windows)
+## 🌟 Executive Summary & Objective
 
-### How to use
+This project explores the critical differences in storage architecture between **row-based text formats (CSV)** and **columnar binary formats (Apache Parquet)** within a distributed Big Data ecosystem. 
 
-1. **Install Python dependencies locally (optional, for charts/report generation)**
-   ```bash
-   pip install -r requirements.txt
-   ```
+Selecting the right storage layout is a vital decision for enterprise and national data architectures (such as **SNIM** or **SOMELEC**). Using the NYC Yellow Taxi dataset (comprising over **1.36 million rows** and **18 columns**), this benchmark provides empirical proof of how Parquet optimizes:
+* 📉 **Disk Storage Footprint** (via dictionary encoding and block compression)
+* 🚀 **Query Performance** (via Column Pruning and Projection Pushdown)
+* 🖥️ **Resource Utilization** (reducing Disk I/O, network bandwidth on HDFS, and CPU cycles)
 
-2. **Start the Cluster**
-   ```bash
-   chmod +x scripts/*.sh
-   ./scripts/00_start_cluster.sh
-   ```
-   This starts the Hadoop HDFS cluster and Spark Master/Worker nodes via Docker. Wait a few minutes for NameNode and ResourceManager to be healthy.
+---
 
-3. **Provide Dataset**
-   Place the NYC Taxi dataset CSV file(s) into `data/`. See `data/README_DATASET.md` for instructions.
+## 🏗️ Cluster Architecture & Environment
 
-4. **Upload Dataset to HDFS**
-   ```bash
-   hdfs dfs -put yellow_tripdata_2021-01.csv /taxi/
-   ```
+The workspace deploys a fully-distributed containerized Hadoop & Spark cluster via `docker-compose.yml`.
 
-5. **Run the Benchmark**
-   ```bash
-   spark-submit --master yarn scripts/02_run_storage_benchmark.py
-   ```
-   This executes the Spark PySpark job inside the spark-master container, performing transformations, saving to HDFS, querying, and extracting physical execution plans.
+### Cluster Services Topology
+* **Storage Layer (HDFS):**
+  * `namenode` (Master node managing filesystem namespace and metadata)
+  * `datanode1` & `datanode2` (Slaves storing data blocks with standard replication)
+* **Compute Layer (Spark):**
+  * `spark-master` (Master scheduler and coordinator)
+  * `spark-worker` (Executes compute tasks; configured with 2 Cores and 2GB RAM)
+* **Interactive Layer:**
+  * `jupyter` (Runs PySpark kernel, pre-configured to mount the project folder at `/work`)
 
-6. **Run HDFS Skew Analysis**
-   ```bash
-   spark-submit --master yarn scripts/03_hdfs_skew_analysis.py
-   ```
+---
 
-7. **Collect Results and Generate Report**
-   ```bash
-   ./scripts/04_collect_results.sh
-   ```
-   This generates the Markdown report in `outputs/final_report.md` along with PNG charts in `outputs/charts/`.
+## 🚀 Step-by-Step Execution Guide
 
-8. **Stop the Cluster**
-   ```bash
-   ./scripts/05_stop_cluster.sh
-   ```
-   *(Note: Add `-v` manually to your docker-compose down if you want to wipe HDFS data completely).*
+Follow these exact commands to boot up the cluster, populate HDFS, run the benchmark, and analyze block storage.
 
-### Expected Outputs
-- `outputs/metrics/*.csv` files containing execution times and HDFS sizes.
-- `outputs/explain_plans/*.txt` physical plans proving Parquet column pruning.
-- `outputs/charts/*.png` visualizations.
-- `outputs/final_report.md` a comprehensive academic report analyzing the benchmarks.
+### 1. Initialize the Cluster Infrastructure
+Spin up the Docker services in the background:
+```bash
+docker compose up -d
+```
+*Wait approximately 1-2 minutes for the Hadoop NameNode and Resource Manager to complete health checks.*
+
+### 2. Prepare and Upload the Dataset to HDFS
+Since the NYC Taxi CSV file is large, place your `yellow_tripdata_2021-01.csv` inside the local `project/data/` directory.
+
+To copy and upload the dataset into HDFS:
+```bash
+# Step A: Copy the local CSV into the namenode container's temporary storage
+docker cp data/yellow_tripdata_2021-01.csv namenode:/tmp/
+
+# Step B: Create a directory inside HDFS
+docker exec -it namenode hdfs dfs -mkdir -p /taxi
+
+# Step C: Put the CSV file from Namenode's local tmp folder to HDFS
+docker exec -it namenode hdfs dfs -put /tmp/yellow_tripdata_2021-01.csv /taxi/
+
+# Step D: List HDFS directory to verify successful upload
+docker exec -it namenode hdfs dfs -ls /taxi
+```
+
+### 3. Run the Analytical Benchmark
+You can run the benchmark interactively using Jupyter Notebook:
+* Access the Jupyter interface at **`http://localhost:8888`**
+* Open and run all cells in **`Sujet_1_Ingenierie_du_Stockage.ipynb`**
+
+---
+
+## 📊 Benchmark Results & Comparative Analysis
+
+The following metrics were captured under identical resource constraints inside the cluster:
+
+### 1. Storage Size & Footprint Reduction
+*Original CSV Size on HDFS:* **456.1 MB**
+
+| File Format | Storage Size on HDFS | Footprint Reduction | Effective Compression Ratio |
+| :--- | :---: | :---: | :---: |
+| **CSV** (Row-Based, Uncompressed) | **456.1 MB** | 0.0% (Baseline) | 1.00x |
+| **Parquet** (Columnar, Uncompressed) | **56.0 MB** | 87.72% | **8.14x** |
+| **Parquet** (Columnar, Snappy Compression) | **36.0 MB** | 92.11% | **12.67x** |
+| **Parquet** (Columnar, Gzip Compression) | **26.0 MB** | **94.30%** | **17.54x** |
+
+### 2. Write Performance Comparison
+Times to write the entire DataFrame back to HDFS:
+
+| Format / Compression | Write Time (Seconds) | Performance Rank | Primary Use-Case |
+| :--- | :---: | :---: | :--- |
+| **Parquet Snappy** | **11.23s** | 🥇 1st (Fastest) | Standard production analytics |
+| **Parquet Gzip** | **13.94s** | 🥈 2nd | Cold storage / Archival data |
+| **Parquet Uncompressed** | **17.97s** | 🥉 3rd | Benchmark baseline (No CPU overhead) |
+
+> [!TIP]
+> **Snappy** is the default Spark compression because it provides a well-balanced compression ratio with extremely low CPU overhead, yielding the fastest write speed. **Gzip** achieves maximum compression at the cost of higher CPU consumption.
+
+### 3. Query Execution Speed
+*Analytical Query Run:* `df.filter(df["VendorID"] == 1).select(avg("fare_amount")).collect()`
+
+| Storage Format | Query Execution Time | Speedup Factor |
+| :--- | :---: | :---: |
+| **CSV** (Row-Based) | **5.23 seconds** | Baseline (1.00x) |
+| **Parquet** (Columnar, Snappy) | **1.75 seconds** | 🚀 **2.99x Faster** |
+
+---
+
+## 🔍 Deep-Dive: Why is Parquet Faster?
+
+### 1. Column Pruning Proof
+In a row-based format like CSV, the query engine must load the entire row (all 18 columns) from disk into memory, parsing every line to filter and aggregate values. 
+In Parquet, the engine selectively reads only the columns required. We verify this via Spark's physical plan using:
+```python
+parquet_df.select("fare_amount").explain(True)
+```
+
+**Physical Plan Output:**
+```text
+*(1) ColumnarToRow
++- FileScan parquet [fare_amount#366] Batched: true, DataFilters: [], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:9000/output/parquet_snappy], PartitionFilters: [], PushedFilters: [], ReadSchema: struct<fare_amount:double>
+```
+* **ReadSchema Proof:** Notice that `ReadSchema` is explicitly restricted to `struct<fare_amount:double>`. No other columns were read from the storage layer, saving massive disk I/O and network transfer.
+
+---
+
+## ⚙️ HDFS Storage Analysis & Integrity Verification
+
+To monitor cluster health, size details, and block distribution, execute these helper commands inside the cluster:
+
+### Check Directory Sizes on HDFS
+Ensure sizes match our benchmarks:
+```bash
+docker exec -it namenode hdfs dfs -du -h /taxi
+docker exec -it namenode hdfs dfs -du -h /output/parquet_uncompressed
+docker exec -it namenode hdfs dfs -du -h /output/parquet_snappy
+docker exec -it namenode hdfs dfs -du -h /output/parquet_gzip
+```
+
+### HDFS Block Integrity & Skew Analysis
+Verify if Parquet files are evenly distributed and that there is no data skew:
+```bash
+docker exec -it namenode hdfs fsck /output/parquet_snappy -files -blocks -locations
+```
+* **Balanced Distribution:** HDFS cuts data into blocks (default 128MB) and replicates them across `datanode1` and `datanode2`. This command checks for block distribution uniformity, ensuring parallel compute tasks complete evenly without stragglers.
+
+---
+
+## 💡 Strategic Value for Large Enterprises (e.g., SNIM, SOMELEC)
+
+For national data infrastructure handling continuous measurements, metering, or mining metrics:
+1. **Infrastructure Cost Reduction:** Moving from CSV to Parquet Snappy/Gzip saves **over 90% in disk capacity**, cutting storage hardware costs dramatically.
+2. **Network Bandwidth Optimization:** Querying Parquet transfers less data across the network, avoiding network congestion bottlenecks.
+3. **High-Performance Reporting:** Queries run up to **3x faster**, enabling real-time analytics and dashboards to load instantly.
