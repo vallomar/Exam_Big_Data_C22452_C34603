@@ -129,9 +129,18 @@ parquet_df.select("fare_amount").explain(True)
 
 ## ⚙️ HDFS Storage Analysis & Integrity Verification
 
-To monitor cluster health, size details, and block distribution, execute these helper commands inside the cluster:
+### 1. Production Scaling (3.0 GB Dataset) Block Calculations
+To validate system behavior at a production scale, we evaluate the cluster layout when scaling the raw dataset size to **3.0 GB**.
 
-### Check Directory Sizes on HDFS
+* **HDFS Block Size:** 128 MB (default).
+* **Logical HDFS Block Count:**
+  * **Binary Calculation (GiB):** $3 \text{ GiB} = 3 \times 1024 \text{ MiB} = 3072 \text{ MiB}$. Thus, $\frac{3072 \text{ MiB}}{128 \text{ MiB}} =$ **24 Blocks** (exactly).
+  * **Decimal Calculation (GB):** $3 \text{ GB} = 3000 \text{ MB}$. Thus, $\frac{3000 \text{ MB}}{128 \text{ MB}} = 23.4375 \text{ Blocks}$, resulting in **23 full blocks of 128 MB** and **1 partial block of 56 MB** (totaling **24 Blocks** on disk).
+* **Replication Footprint on a 2-Node Cluster (`datanode1` & `datanode2`):**
+  * **HDFS Default Replication (Factor = 3):** Standard HDFS configuration attempts to replicate each block 3 times across unique nodes. For our 24 blocks, this equals **72 physical block replicas**. Since our cluster has only 2 physical DataNodes, HDFS cannot write the third copy to a unique host. The NameNode will dashboard all 24 blocks as **under-replicated**, although the dataset remains fully functional.
+  * **Optimized Replication (Factor = 2):** Setting replication to 2 mirrors our physical architecture. Each block is stored on both nodes, giving exactly **48 physical blocks** (24 blocks per DataNode). This achieves maximum fault tolerance with zero under-replication warnings and optimized network/disk space.
+
+### 2. Check Directory Sizes on HDFS
 Ensure sizes match our benchmarks:
 ```bash
 docker exec -it namenode hdfs dfs -du -h /taxi
